@@ -1,0 +1,4 @@
+*.o
+*.lst
+myPrintf
+exec
