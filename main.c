@@ -1,13 +1,8 @@
-#include <stdio.h>
-
 int myPrintf(const char* text, ...);
 
 int main()
 {
-	int n;
-	myPrintf("Write your number: ");
-	scanf("%d", &n);
-	myPrintf("Hello world x%d times!\n", n);
+	myPrintf("%d %s %x %d%%%c%b\n", -1, "love", 3802, 100, 33, 126);
 
 	return 0;
 }
