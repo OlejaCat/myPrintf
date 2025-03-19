@@ -1,23 +1,53 @@
 section .rodata
 format_table:
 	dq print_symbol
-	dq 60 dup(0)
+	dq 'b'-'%'-1 dup(0)
 	dq print_binary
 	dq print_char
 	dq print_decimal
-	dq 10 dup(0)
+	dq 'o'-'d'-1 dup(0)
 	dq print_octal
-	dq 3 dup(0)
+	dq 's'-'o'-1 dup(0)
 	dq print_string
-	dq 4 dup(0)
+	dq 'x'-'s'-1 dup(0)
 	dq print_hex
 
 section .data
-buffer_string:	db 256 dup(0)
-buffer_size  	equ $ - buffer_string
+buffer_string:	db 128 dup(0)
+buffer_end  	equ $
 
 global myPrintf
 section .text
+
+%macro ConvertToSystem 1
+.proceed_digits:
+	mov rbx, %1
+	xor rdx, rdx
+	div rbx
+	push rdx
+	inc rcx
+	test rax, rax
+	jz .print_digits
+	jmp .proceed_digits
+
+.print_digits:
+	test rcx, rcx
+	jz .to_string_out
+	pop rax
+	add rax, '0'
+	mov [rsi], al
+	inc rsi
+	dec rcx
+	jmp .print_digits
+
+.to_string_out:
+%endmacro
+
+%macro putCharWithCheck 1
+	mov [rsi], %1
+	inc rsi
+    call printBufferWithCheck
+%endmacro
 
 myPrintf:
 	pop r10
@@ -29,13 +59,10 @@ myPrintf:
 	push rsi
 
 	mov rsi, buffer_string
-	call formatInputString
+	jmp formatInputString
 
-	xor rdi, rdi
-	mov rdx, rcx
-	mov rsi, buffer_string
-	mov rax, 0x1
-	syscall	
+formatInputStringBack:
+    call printBuffer
 
 	pop rsi
 	pop rdx
@@ -51,14 +78,14 @@ formatInputString:
 	push rbx
 	push rdx
 
-	mov rbx, 24
+	mov rbx, 16
 	mov rdx, rsi
 	xor rcx, rcx
 
 process_string:
-	cmp [rdi], byte 0
+	cmp byte [rdi], 0
 	je format_input_string_out
-	cmp [rdi], byte '%'
+	cmp byte [rdi], '%'
 	je format
 	jmp print_symbol
 
@@ -66,8 +93,17 @@ format:
 	inc rdi
 	xor rax, rax
 	mov al, [rdi]	
-	sub al, 37
-	jmp [format_table + rax * 8]
+	sub al, '%'
+    cmp al, 0
+    jl error
+    cmp al, 'x'-'%'
+    ja error
+    imul rax, 8
+    add rax, format_table 
+    mov rax, [rax]
+    test rax, rax
+    jz error
+	jmp rax
 
 print_char:
 	mov al, [rsp+rbx]			
@@ -78,34 +114,43 @@ print_char:
 print_string:
 	push rdi
 	mov rdi, [rsp+rbx+8]
-	call putStringToBuffer
+	jmp putStringToBuffer
+
+putStringToBufferBack:
 	pop rdi	
 	jmp next_argument
 
 print_decimal:
 	mov rax, [rsp+rbx]	
-	call putDecimalToBuffer 
+	jmp putDecimalToBuffer 
+    
+putDecimalToBufferBack:
 	jmp next_argument
 
 print_hex:
 	mov rax, [rsp+rbx]
-	call putHexToBuffer
+	jmp putHexToBuffer
+
+putHexToBufferBack:
 	jmp next_argument
 
 print_octal:
 	mov rax, [rsp+rbx]
-	call putOctalTobuffer
+	jmp putOctalTobuffer
+
+putOctalTobufferBack:
 	jmp next_argument
 
 print_binary:
 	mov rax, [rsp+rbx]
-	call putBinaryTobuffer
+	jmp putBinaryTobuffer
+
+putBinaryTobufferBack:
 	jmp next_argument
 
 print_symbol:
 	mov al, byte [rdi]
-	mov [rsi], al
-	inc rsi
+    putCharWithCheck al
 	jmp next_symbol
 
 next_argument:
@@ -116,6 +161,9 @@ next_symbol:
 	inc rdi
 	jmp process_string
 
+error:
+    mov rcx, -1
+
 format_input_string_out:
 	mov rax, rcx
 	mov rcx, rsi
@@ -123,7 +171,7 @@ format_input_string_out:
 
 	pop rdx
 	pop rbx
-	ret
+    jmp formatInputStringBack
 
 
 putBinaryTobuffer:
@@ -132,32 +180,12 @@ putBinaryTobuffer:
 	push rdx
 
 	xor rcx, rcx
+    ConvertToSystem 2
 
-.binary_proceed_digits:
-	mov rbx, 2
-	xor rdx, rdx
-	div rbx
-	push rdx
-	inc rcx
-	test rax, rax
-	jz .binary_print_digits
-	jmp .binary_proceed_digits
-
-.binary_print_digits:
-	test rcx, rcx
-	jz .binary_to_string_out
-	pop rax
-	add rax, '0'
-	mov [rsi], al
-	inc rsi
-	dec rcx
-	jmp .binary_print_digits
-
-.binary_to_string_out:
 	pop rdx
 	pop rcx
 	pop rbx	
-	ret
+    jmp putBinaryTobufferBack
 
 putOctalTobuffer:
 	push rbx
@@ -165,32 +193,13 @@ putOctalTobuffer:
 	push rdx
 
 	xor rcx, rcx
+    ConvertToSystem 8
 
-.octal_proceed_digits:
-	mov rbx, 8
-	xor rdx, rdx
-	div rbx
-	push rdx
-	inc rcx
-	test rax, rax
-	jz .octal_print_digits
-	jmp .octal_proceed_digits
-
-.octal_print_digits:
-	test rcx, rcx
-	jz .octal_to_string_out
-	pop rax
-	add rax, '0'
-	mov [rsi], al
-	inc rsi
-	dec rcx
-	jmp .octal_print_digits
-
-.octal_to_string_out:
 	pop rdx
 	pop rcx
 	pop rbx	
-	ret
+    jmp putOctalTobufferBack
+
 
 putHexToBuffer:
 	push rbx
@@ -223,8 +232,7 @@ putHexToBuffer:
 	add rax, 'a'
 			
 .hex_paste_to_buffer:
-	mov [rsi], al
-	inc rsi
+    putCharWithCheck al
 	dec rcx
 	jmp .hex_print_digits
 
@@ -232,7 +240,7 @@ putHexToBuffer:
 	pop rdx
 	pop rcx
 	pop rbx
-	ret	
+    jmp putHexToBufferBack
 	
 
 putDecimalToBuffer:
@@ -251,35 +259,16 @@ putDecimalToBuffer:
 	push rax
 	xor rax, rax
 	mov al, '-'
-	mov [rsi], al
-	inc rsi
+    putCharWithCheck al
 	pop rax
 
-.proceed_digits:
-	mov rbx, 10
-	xor rdx, rdx
-	div rbx
-	push rdx
-	inc rcx
-	test rax, rax
-	jz .print_digits
-	jmp .proceed_digits
+    ConvertToSystem 10
 
-.print_digits:
-	cmp rcx, 0
-	je .decimal_to_string_out
-	pop rax
-	add rax, '0'
-	mov [rsi], al
-	inc rsi
-	dec rcx
-	jmp .print_digits
-
-.decimal_to_string_out:
 	pop rdx
 	pop rcx
 	pop rbx	
-	ret
+    jmp putDecimalToBufferBack
+
 
 putStringToBuffer:
 	push rbx
@@ -290,8 +279,7 @@ putStringToBuffer:
 
 .put_char:
 	mov cl, [rdi]
-	mov [rsi], cl
-	inc rsi
+    putCharWithCheck cl
 	scasb
 	jne .put_char
 
@@ -300,8 +288,41 @@ putStringToBuffer:
 
 	pop rcx
 	pop rbx
+    jmp putStringToBufferBack
 
-	ret
+
+printBufferWithCheck:
+    test rsi, buffer_end
+    jz .clear_buffer
+    jmp .print_buffer_out
+
+.clear_buffer:
+    call printBuffer
+
+.print_buffer_out:
+    ret
+
+
+printBuffer:
+    push rax
+    push rcx
+    push rdx
+    push rdi
+
+    mov rcx, rsi
+    sub rcx, buffer_string
+	xor rdi, rdi
+	mov rdx, rcx 
+	mov rsi, buffer_string
+	mov rax, 0x1
+	syscall	
+    
+    pop rdi
+    pop rdx
+    pop rcx
+    pop rax
+    ret
+
 
 stringLength:
 	push rbx
@@ -319,4 +340,3 @@ stringLength:
 	pop rcx
 	pop rbx
 
-	ret	
