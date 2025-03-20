@@ -19,6 +19,16 @@ buffer_end  	equ $
 global myPrintf
 section .text
 
+;-----------------------------------------------------------------------------
+; ConvertToSystem - Macro to convert number to specified base
+;-----------------------------------------------------------------------------
+; Converts RAX to string in given base and stores digits in buffer
+; Entry: %1 = Target base (immediate value)
+;        RAX = Number to convert
+;        RSI = Buffer write position
+; Exit:  Digits written to buffer, RSI updated
+; Destr: RAX, RBX, RDX, RCX
+;-----------------------------------------------------------------------------
 %macro ConvertToSystem 1
 .proceed_digits:
 	mov rbx, %1
@@ -43,12 +53,33 @@ section .text
 .to_string_out:
 %endmacro
 
+;-----------------------------------------------------------------------------
+; putCharWithCheck - Macro to write char with buffer check
+;-----------------------------------------------------------------------------
+; Writes character to buffer and flushes if full
+; Entry: %1 = Character to write
+;        RSI = Current buffer position
+; Exit:  Character added to buffer, RSI incremented
+; Destr: AL, RSI
+;-----------------------------------------------------------------------------
 %macro putCharWithCheck 1
 	mov [rsi], %1
 	inc rsi
     call printBufferWithCheck
 %endmacro
 
+
+;-----------------------------------------------------------------------------
+; myPrintf - My printf implementation
+;-----------------------------------------------------------------------------
+; Formats and prints text according to format string with specifiers:
+; %b - binary, %c - char, %d - decimal, %o - octal, %s - string, %x - hex
+; Pushes registers values on top of stack
+; Entry: RDI = Format string
+;        Variable arguments in RSI, RDX, RCX, R8, R9, stack
+; Exit:  Formatted output written to stdout
+; Destr: RAX, RCX, RDX, RSI, RDI, R10, R11
+;-----------------------------------------------------------------------------
 myPrintf:
 	pop r10
 
@@ -74,12 +105,21 @@ formatInputStringBack:
 	ret
 
 
+;-----------------------------------------------------------------------------
+; formatInputString - Main format processing loop
+;-----------------------------------------------------------------------------
+; Processes format string and arguments
+; Entry: RDI = Format string
+;        RSI = Buffer position
+; Exit:  Processed format string with arguments in buffer
+; Destr: RAX, RBX, RCX, RDX, RDI, RSI
+;-----------------------------------------------------------------------------
 formatInputString:
 	push rbx
 	push rdx
 
-	mov rbx, 16
-	mov rdx, rsi
+	mov rbx, 16   ; stack shift to get argumants
+	mov rdx, rsi  ; saving start of buffer pointer
 	xor rcx, rcx
 
 process_string:
@@ -174,6 +214,15 @@ format_input_string_out:
     jmp formatInputStringBack
 
 
+;-----------------------------------------------------------------------------
+; putBinaryToBuffer - Handles '%b' format specifier
+;-----------------------------------------------------------------------------
+; Outputs unsigned binary number from arguments
+; Entry: RAX = 64-bit unsigned integer
+;        RSI = Buffer position
+; Exit:  Binary string added to buffer
+; Destr: RAX, RBX, RCX, RDX, RSI
+;-----------------------------------------------------------------------------
 putBinaryTobuffer:
 	push rbx
 	push rcx
@@ -187,6 +236,15 @@ putBinaryTobuffer:
 	pop rbx	
     jmp putBinaryTobufferBack
 
+;-----------------------------------------------------------------------------
+; putOctalToBuffer - Handles '%o' format specifier
+;-----------------------------------------------------------------------------
+; Outputs unsigned octal number from arguments
+; Entry: RAX = 64-bit unsigned integer
+;        RSI = Buffer position
+; Exit:  Octal string added to buffer
+; Destr: RAX, RBX, RCX, RDX, RSI
+;-----------------------------------------------------------------------------
 putOctalTobuffer:
 	push rbx
 	push rcx
@@ -201,6 +259,15 @@ putOctalTobuffer:
     jmp putOctalTobufferBack
 
 
+;-----------------------------------------------------------------------------
+; putHexToBuffer - Handles '%x' format specifier
+;-----------------------------------------------------------------------------
+; Outputs unsigned hex number from arguments
+; Entry: RAX = 64-bit unsigned integer
+;        RSI = Buffer position
+; Exit:  Hex string added to buffer
+; Destr: RAX, RBX, RCX, RDX, RSI
+;-----------------------------------------------------------------------------
 putHexToBuffer:
 	push rbx
 	push rcx
@@ -243,6 +310,15 @@ putHexToBuffer:
     jmp putHexToBufferBack
 	
 
+;-----------------------------------------------------------------------------
+; putDecimalToBuffer - Handles '%d' format specifier
+;-----------------------------------------------------------------------------
+; Outputs signed decimal number from arguments
+; Entry: EAX = 32-bit signed integerb
+;        RSI = Buffer position
+; Exit:  Decimal string added to buffer
+; Destr: RAX, RBX, RCX, RDX, RSI
+;-----------------------------------------------------------------------------
 putDecimalToBuffer:
 	push rbx
 	push rcx
@@ -270,6 +346,15 @@ putDecimalToBuffer:
     jmp putDecimalToBufferBack
 
 
+;-----------------------------------------------------------------------------
+; putStringToBuffer - Handles '%s' format specifier
+;-----------------------------------------------------------------------------
+; Outputs null-terminated string from arguments
+; Entry: RDI = String pointer
+;        RSI = Buffer position
+; Exit:  String copied to buffer
+; Destr: RAX, RCX, RDI, RSI
+;-----------------------------------------------------------------------------
 putStringToBuffer:
 	push rbx
 	push rcx
@@ -291,6 +376,14 @@ putStringToBuffer:
     jmp putStringToBufferBack
 
 
+;-----------------------------------------------------------------------------
+; printBufferWithCheck - Flushes buffer if full
+;-----------------------------------------------------------------------------
+; Checks buffer position and flushes if reached end
+; Entry: RSI = Current buffer position
+; Exit:  Buffer flushed if full, RSI reset if flushed
+; Destr: RAX, RCX, RDX, RSI
+;-----------------------------------------------------------------------------
 printBufferWithCheck:
     test rsi, buffer_end
     jz .clear_buffer
@@ -303,6 +396,15 @@ printBufferWithCheck:
     ret
 
 
+;-----------------------------------------------------------------------------
+; putBinaryToBuffer - Handles '%b' format specifier
+;-----------------------------------------------------------------------------
+; Outputs unsigned binary number from arguments
+; Entry: RAX = 64-bit unsigned integer
+;        RSI = Buffer position
+; Exit:  Binary string added to buffer
+; Destr: RAX, RBX, RCX, RDX, RSI
+;-----------------------------------------------------------------------------
 printBuffer:
     push rax
     push rcx
@@ -314,7 +416,7 @@ printBuffer:
 	xor rdi, rdi
 	mov rdx, rcx 
 	mov rsi, buffer_string
-	mov rax, 0x1
+	mov rax, 0x1            ; first command write
 	syscall	
     
     pop rdi
@@ -322,21 +424,3 @@ printBuffer:
     pop rcx
     pop rax
     ret
-
-
-stringLength:
-	push rbx
-	push rcx
-
-	mov rbx, rdi
-	xor al, al
-
-	mov rcx, 0xffffffff
-	repne scasb
-	
-	sub rdi, rbx
-	mov rax, rdi
-	
-	pop rcx
-	pop rbx
-
