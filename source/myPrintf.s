@@ -1,16 +1,32 @@
+;------------------------------------------------------------------------------
+; Constants
+;------------------------------------------------------------------------------
+
+LINUX_WRITE_COMMAND equ 0x1
+
+
+;------------------------------------------------------------------------------
+; Jump table for format and lowercase printable values
+;------------------------------------------------------------------------------
 section .rodata
 format_table:
 	dq print_symbol
-	dq 'b'-'%'-1 dup(0)
+	dq 'b'-'%'-1 dup(error)
 	dq print_binary
 	dq print_char
 	dq print_decimal
-	dq 'o'-'d'-1 dup(0)
+	dq 'o'-'d'-1 dup(error)
 	dq print_octal
-	dq 's'-'o'-1 dup(0)
+	dq 's'-'o'-1 dup(error)
 	dq print_string
-	dq 'x'-'s'-1 dup(0)
+	dq 'x'-'s'-1 dup(error)
 	dq print_hex
+    dq error
+printable: 
+    db "0123456789abcdef"
+
+
+;------------------------------------------------------------------------------
 
 section .data
 buffer_string:	db 128 dup(0)
@@ -44,7 +60,7 @@ section .text
 	test rcx, rcx
 	jz .to_string_out
 	pop rax
-	add rax, '0'
+    mov al, [printable + rax]
 	mov [rsi], al
 	inc rsi
 	dec rcx
@@ -134,15 +150,15 @@ format:
 	xor rax, rax
 	mov al, [rdi]	
 	sub al, '%'
+
     cmp al, 0
     jl error
+
     cmp al, 'x'-'%'
     ja error
-    imul rax, 8
-    add rax, format_table 
-    mov rax, [rax]
-    test rax, rax
-    jz error
+
+    shl rax, 3
+    mov rax, [format_table + rax]
 	jmp rax
 
 print_char:
@@ -274,36 +290,8 @@ putHexToBuffer:
 	push rdx
 
 	xor rcx, rcx
+    ConvertToSystem 16
 
-.hex_proceed_digits:
-	mov rbx, 16
-	xor rdx, rdx
-	div rbx
-	push rdx
-	inc rcx
-	test rax, rax
-	jz .hex_print_digits
-	jmp .hex_proceed_digits
-
-.hex_print_digits:
-	test rcx, rcx
-	jz .hex_put_digits_out	
-	pop rax
-	cmp rax, 9
-	ja .hex_letter_digit
-	add rax, '0'
-	jmp .hex_paste_to_buffer
-	
-.hex_letter_digit:
-	sub rax, 10
-	add rax, 'a'
-			
-.hex_paste_to_buffer:
-    putCharWithCheck al
-	dec rcx
-	jmp .hex_print_digits
-
-.hex_put_digits_out:
 	pop rdx
 	pop rcx
 	pop rbx
@@ -416,7 +404,7 @@ printBuffer:
 	xor rdi, rdi
 	mov rdx, rcx 
 	mov rsi, buffer_string
-	mov rax, 0x1            ; first command write
+	mov rax, LINUX_WRITE_COMMAND ; first command write
 	syscall	
     
     pop rdi
