@@ -36,4 +36,4 @@ cd myprintf
 
 
 ## Usage
-You can watch exaple program in 'main.c'
+You can watch exaple program in `source/main.c`
